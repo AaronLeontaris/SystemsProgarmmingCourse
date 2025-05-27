@@ -1,62 +1,101 @@
-#include "memfs.hpp"
-#include <stdexcept>
-#include <cstring>
-#include <ctime>
+#include "memfs.h"
+#include <fstream>
+#include <sstream>
+#include <sys/stat.h>
 #include <unistd.h>
-#include <algorithm>
-#include <iostream>
+#include <pwd.h>
+#include <jsoncpp/json/json.h>
 
-#define MAX_FILENAME_LEN 255
-#define MAX_FILE_SIZE 512
+MemFS memfs;
 
-static std::shared_ptr<MemNode> root;
-
-MemNode::MemNode(const std::string& name, MemNodeType type, mode_t mode, MemNode *parent)
-    : name(name), type(type), mode(mode), uid(getuid()), gid(getgid()), size(0),
-      parent(parent), atime(std::time(0)), mtime(std::time(0)), ctime(std::time(0)) {}
-
-void memfs_init() {
-    root = std::make_shared<MemNode>("/", MemNodeType::Directory, 0755, nullptr);
+MemFSNode::MemFSNode(const std::string& n, NodeType t, mode_t m, uid_t u, gid_t g, std::weak_ptr<MemFSNode> p)
+    : name(n), type(t), mode(m), uid(u), gid(g), parent(p) {
+    time(&atime);
+    mtime = atime;
+    ctime = atime;
+    size = 0;
 }
 
-static std::vector<std::string> split_path(const std::string &path) {
-    std::vector<std::string> result;
-    size_t start = 0, end = 0;
-    while ((end = path.find('/', start)) != std::string::npos) {
-        if (end != start)
-            result.emplace_back(path.substr(start, end - start));
-        start = end + 1;
+static void node_to_json(const std::shared_ptr<MemFSNode>& node, Json::Value& jn) {
+    jn["name"] = node->name;
+    jn["type"] = (node->type == NodeType::File ? "file" : (node->type == NodeType::Directory ? "dir" : "symlink"));
+    jn["data"] = node->data;
+    jn["size"] = (Json::UInt64)node->size;
+    jn["mode"] = node->mode;
+    jn["uid"] = node->uid;
+    jn["gid"] = node->gid;
+    jn["atime"] = (Json::Int64)node->atime;
+    jn["mtime"] = (Json::Int64)node->mtime;
+    jn["ctime"] = (Json::Int64)node->ctime;
+    if (node->type == NodeType::Directory) {
+        for (auto& [n, child] : node->children) {
+            Json::Value jc;
+            node_to_json(child, jc);
+            jn["children"].append(jc);
+        }
     }
-    if (start < path.size())
-        result.emplace_back(path.substr(start));
-    return result;
 }
 
-std::shared_ptr<MemNode> memfs_lookup(const std::string& path) {
-    if (path == "/" || path.empty()) return root;
-    auto comps = split_path(path);
-    auto node = root;
-    for (const auto& comp : comps) {
-        auto it = node->children.find(comp);
-        if (it == node->children.end())
-            return nullptr;
-        node = it->second;
+std::string MemFSNode::to_json() const {
+    Json::Value jn;
+    node_to_json(std::const_pointer_cast<MemFSNode>(shared_from_this()), jn);
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    return Json::writeString(builder, jn);
+}
+
+static std::shared_ptr<MemFSNode> node_from_json(const Json::Value& jn, std::weak_ptr<MemFSNode> parent) {
+    NodeType t = NodeType::File;
+    std::string stype = jn["type"].asString();
+    if (stype == "dir") t = NodeType::Directory;
+    else if (stype == "symlink") t = NodeType::Symlink;
+    auto node = std::make_shared<MemFSNode>(
+        jn["name"].asString(), t, jn["mode"].asUInt(), jn["uid"].asUInt(), jn["gid"].asUInt(), parent
+    );
+    node->data = jn["data"].asString();
+    node->size = jn["size"].asUInt64();
+    node->atime = jn["atime"].asInt64();
+    node->mtime = jn["mtime"].asInt64();
+    node->ctime = jn["ctime"].asInt64();
+    if (t == NodeType::Directory) {
+        const Json::Value& jch = jn["children"];
+        for (auto& jc : jch) {
+            auto child = node_from_json(jc, node);
+            node->children[child->name] = child;
+        }
     }
     return node;
 }
 
-// Returns parent node and sets 'child' to the last component
-std::shared_ptr<MemNode> memfs_parent(const std::string& path, std::string& child) {
-    auto comps = split_path(path);
-    if (comps.empty()) return nullptr;
-    child = comps.back();
-    comps.pop_back();
-    auto node = root;
-    for (const auto& comp : comps) {
-        auto it = node->children.find(comp);
-        if (it == node->children.end() || it->second->type != MemNodeType::Directory)
-            return nullptr;
-        node = it->second;
+std::shared_ptr<MemFSNode> MemFSNode::from_json(const std::string& json, std::weak_ptr<MemFSNode> parent) {
+    Json::CharReaderBuilder b;
+    Json::Value root;
+    std::istringstream s(json);
+    std::string errs;
+    if (!Json::parseFromStream(b, s, &root, &errs)) return nullptr;
+    return node_from_json(root, parent);
+}
+
+// ---- MemFS ----
+MemFS::MemFS() {
+    root = std::make_shared<MemFSNode>("/", NodeType::Directory, 0755, getuid(), getgid(), std::weak_ptr<MemFSNode>());
+    root->parent.reset();
+}
+
+void MemFS::save() {
+    std::ofstream ofs(PERSISTENCE_FILE, std::ios::trunc);
+    ofs << root->to_json();
+}
+
+void MemFS::load() {
+    std::ifstream ifs(PERSISTENCE_FILE);
+    if (!ifs) return; // no persistence file yet
+    std::stringstream buf;
+    buf << ifs.rdbuf();
+    std::string content = buf.str();
+    auto r = MemFSNode::from_json(content, std::weak_ptr<MemFSNode>());
+    if (r) {
+        root = r;
+        root->parent.reset();
     }
-    return node;
 }

@@ -1,154 +1,180 @@
-#include "memfs.hpp"
+#include "memfs.h"
 #include <fuse.h>
-#include <cstring>
 #include <errno.h>
+#include <cstring>
+#include <string>
+#include <memory>
+#include <vector>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <algorithm>
 
-// Helper to fill struct stat from MemNode
-static void set_stat(std::shared_ptr<MemNode> node, struct stat* st) {
-    memset(st, 0, sizeof(struct stat));
-    st->st_uid = node->uid;
-    st->st_gid = node->gid;
-    st->st_mode = node->mode;
-    st->st_nlink = (node->type == MemNodeType::Directory) ? 2 + node->children.size() : 1;
-    st->st_size = node->size;
-    st->st_atime = node->atime;
-    st->st_mtime = node->mtime;
-    st->st_ctime = node->ctime;
+static std::vector<std::string> split_path(const char *path) {
+    std::vector<std::string> elems;
+    std::string s(path);
+    size_t pos = 0;
+    while ((pos = s.find('/')) != std::string::npos) {
+        if (pos != 0) elems.push_back(s.substr(0, pos));
+        s = s.substr(pos + 1);
+    }
+    if (!s.empty()) elems.push_back(s);
+    return elems;
 }
 
-// getattr
-extern "C" int memfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *) {
-    auto node = memfs_lookup(path);
+// Find node by path
+static std::shared_ptr<MemFSNode> find_node(const char *path) {
+    if (strcmp(path, "/") == 0) return memfs.root;
+    auto parts = split_path(path);
+    auto curr = memfs.root;
+    for (const auto& p : parts) {
+        if (curr->type != NodeType::Directory) return nullptr;
+        if (curr->children.count(p) == 0) return nullptr;
+        curr = curr->children[p];
+    }
+    return curr;
+}
+// Find parent node of a path
+static std::shared_ptr<MemFSNode> find_parent(const char *path, std::string& leaf) {
+    auto parts = split_path(path);
+    if (parts.empty()) return nullptr;
+    leaf = parts.back();
+    parts.pop_back();
+    auto curr = memfs.root;
+    for (const auto& p : parts) {
+        if (curr->type != NodeType::Directory) return nullptr;
+        if (curr->children.count(p) == 0) return nullptr;
+        curr = curr->children[p];
+    }
+    return curr;
+}
+
+// normale Fuse callbasd
+
+static int memfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *) {
+    memset(stbuf, 0, sizeof(struct stat));
+    auto node = find_node(path);
     if (!node) return -ENOENT;
-    set_stat(node, stbuf);
+    if (node->type == NodeType::Directory) {
+        stbuf->st_mode = S_IFDIR | node->mode;
+        stbuf->st_nlink = 2;
+    } else if (node->type == NodeType::File) {
+        stbuf->st_mode = S_IFREG | node->mode;
+        stbuf->st_nlink = 1;
+        stbuf->st_size = node->size;
+    } else if (node->type == NodeType::Symlink) {
+        stbuf->st_mode = S_IFLNK | node->mode;
+        stbuf->st_nlink = 1;
+        stbuf->st_size = node->data.size();
+    }
+    stbuf->st_uid = node->uid;
+    stbuf->st_gid = node->gid;
+    stbuf->st_atime = node->atime;
+    stbuf->st_mtime = node->mtime;
+    stbuf->st_ctime = node->ctime;
     return 0;
 }
 
-// readdir
-extern "C" int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info *) {
-    auto node = memfs_lookup(path);
-    if (!node || node->type != MemNodeType::Directory) return -ENOENT;
-    filler(buf, ".", nullptr, 0);
-    filler(buf, "..", nullptr, 0);
+static int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info *, enum fuse_readdir_flags) {
+    auto node = find_node(path);
+    if (!node || node->type != NodeType::Directory) return -ENOENT;
+    filler(buf, ".", nullptr, 0, (fuse_fill_dir_flags)0);
+    filler(buf, "..", nullptr, 0, (fuse_fill_dir_flags)0);
     for (const auto& [name, child] : node->children) {
-        filler(buf, name.c_str(), nullptr, 0);
+        filler(buf, name.c_str(), nullptr, 0, (fuse_fill_dir_flags)0);
     }
     return 0;
 }
 
-// mkdir
-extern "C" int memfs_mkdir(const char *path, mode_t mode) {
-    std::string child;
-    auto parent = memfs_parent(path, child);
-    if (!parent || parent->type != MemNodeType::Directory) return -ENOENT;
-    if (child.length() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
-    if (parent->children.count(child)) return -EEXIST;
-    auto newdir = std::make_shared<MemNode>(child, MemNodeType::Directory, (mode & 0777) | S_IFDIR, parent.get());
-    parent->children[child] = newdir;
-    parent->mtime = std::time(0);
+static int memfs_mkdir(const char *path, mode_t mode) {
+    std::string leaf;
+    auto parent = find_parent(path, leaf);
+    if (!parent || parent->type != NodeType::Directory) return -ENOENT;
+    if (leaf.size() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
+    if (parent->children.count(leaf)) return -EEXIST;
+    auto node = std::make_shared<MemFSNode>(leaf, NodeType::Directory, mode, fuse_get_context()->uid, fuse_get_context()->gid, parent);
+    parent->children[leaf] = node;
+    memfs.save();
     return 0;
 }
 
-// mknod (for files)
-extern "C" int memfs_mknod(const char *path, mode_t mode, dev_t) {
-    std::string child;
-    auto parent = memfs_parent(path, child);
-    if (!parent || parent->type != MemNodeType::Directory) return -ENOENT;
-    if (child.length() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
-    if (parent->children.count(child)) return -EEXIST;
-    if (!S_ISREG(mode)) return -EINVAL;
-    auto newfile = std::make_shared<MemNode>(child, MemNodeType::File, (mode & 0777) | S_IFREG, parent.get());
-    parent->children[child] = newfile;
-    parent->mtime = std::time(0);
+static int memfs_mknod(const char *path, mode_t mode, dev_t) {
+    std::string leaf;
+    auto parent = find_parent(path, leaf);
+    if (!parent || parent->type != NodeType::Directory) return -ENOENT;
+    if (leaf.size() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
+    if (parent->children.count(leaf)) return -EEXIST;
+    auto node = std::make_shared<MemFSNode>(leaf, NodeType::File, mode, fuse_get_context()->uid, fuse_get_context()->gid, parent);
+    parent->children[leaf] = node;
+    memfs.save();
     return 0;
 }
 
-// open (just check existence)
-extern "C" int memfs_open(const char *path, struct fuse_file_info *) {
-    auto node = memfs_lookup(path);
-    if (!node || node->type != MemNodeType::File) return -ENOENT;
-    return 0;
-}
-
-// read
-extern "C" int memfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *) {
-    auto node = memfs_lookup(path);
-    if (!node || node->type != MemNodeType::File) return -ENOENT;
-    if (offset >= node->size) return 0;
-    size_t to_read = std::min(size, node->size - offset);
-    memcpy(buf, node->data.data() + offset, to_read);
-    node->atime = std::time(0);
-    return to_read;
-}
-
-// write
-extern "C" int memfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *) {
-    auto node = memfs_lookup(path);
-    if (!node || node->type != MemNodeType::File) return -ENOENT;
-    if (offset > MAX_FILE_SIZE) return -EFBIG;
-    size_t to_write = std::min(size, MAX_FILE_SIZE - offset);
-    if (offset + to_write > node->data.size())
-        node->data.resize(offset + to_write, 0);
-    memcpy(node->data.data() + offset, buf, to_write);
-    node->size = std::max(node->size, offset + to_write);
-    node->mtime = std::time(0);
-    node->ctime = std::time(0);
-    return to_write;
-}
-
-// create (open + mknod)
-extern "C" int memfs_create(const char *path, mode_t mode, struct fuse_file_info *) {
+static int memfs_create(const char *path, mode_t mode, struct fuse_file_info *) {
     return memfs_mknod(path, mode, 0);
 }
 
-// symlink
-extern "C" int memfs_symlink(const char *target, const char *linkpath) {
-    std::string child;
-    auto parent = memfs_parent(linkpath, child);
-    if (!parent || parent->type != MemNodeType::Directory) return -ENOENT;
-    if (child.length() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
-    if (parent->children.count(child)) return -EEXIST;
-    auto node = std::make_shared<MemNode>(child, MemNodeType::Symlink, S_IFLNK | 0777, parent.get());
-    node->symlink_target = target;
-    node->size = strlen(target);
-    parent->children[child] = node;
-    parent->mtime = std::time(0);
+static int memfs_open(const char *path, struct fuse_file_info *) {
+    auto node = find_node(path);
+    if (!node || node->type != NodeType::File) return -ENOENT;
     return 0;
 }
 
-// readlink
-extern "C" int memfs_readlink(const char *path, char *buf, size_t size) {
-    auto node = memfs_lookup(path);
-    if (!node || node->type != MemNodeType::Symlink) return -EINVAL;
-    size_t len = std::min(size - 1, node->symlink_target.length());
-    memcpy(buf, node->symlink_target.c_str(), len);
-    buf[len] = '\0';
-    node->atime = std::time(0);
+static int memfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *) {
+    auto node = find_node(path);
+    if (!node || node->type != NodeType::File) return -ENOENT;
+    if ((size_t)offset >= node->size) return 0;
+    size_t to_read = std::min(size, node->size - (size_t)offset);
+    memcpy(buf, node->data.data() + offset, to_read);
+    node->atime = time(NULL);
+    return to_read;
+}
+
+static int memfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *) {
+    auto node = find_node(path);
+    if (!node || node->type != NodeType::File) return -ENOENT;
+    if (offset > MAX_FILE_SIZE) return -EFBIG;
+    size_t to_write = std::min(size, (size_t)(MAX_FILE_SIZE - offset));
+    if ((size_t)offset + to_write > node->data.size()) node->data.resize(offset + to_write);
+    memcpy(&node->data[0] + offset, buf, to_write);
+    node->size = node->data.size();
+    node->mtime = time(NULL);
+    node->ctime = node->mtime;
+    memfs.save();
+    return to_write;
+}
+
+static int memfs_symlink(const char *from, const char *to) {
+    std::string leaf;
+    auto parent = find_parent(to, leaf);
+    if (!parent || parent->type != NodeType::Directory) return -ENOENT;
+    if (leaf.size() > MAX_FILENAME_LEN) return -ENAMETOOLONG;
+    if (parent->children.count(leaf)) return -EEXIST;
+    auto node = std::make_shared<MemFSNode>(leaf, NodeType::Symlink, 0777, fuse_get_context()->uid, fuse_get_context()->gid, parent);
+    node->data = from;
+    node->size = node->data.size();
+    parent->children[leaf] = node;
+    memfs.save();
     return 0;
 }
 
-// unlink (delete file)
-extern "C" int memfs_unlink(const char *path) {
-    std::string child;
-    auto parent = memfs_parent(path, child);
-    if (!parent || parent->type != MemNodeType::Directory) return -ENOENT;
-    auto it = parent->children.find(child);
-    if (it == parent->children.end() || it->second->type == MemNodeType::Directory) return -ENOENT;
-    parent->children.erase(it);
-    parent->mtime = std::time(0);
+static int memfs_readlink(const char *path, char *buf, size_t size) {
+    auto node = find_node(path);
+    if (!node || node->type != NodeType::Symlink) return -ENOENT;
+    strncpy(buf, node->data.c_str(), size - 1);
+    buf[size - 1] = '\0';
     return 0;
 }
 
-// rmdir (delete empty directory)
-extern "C" int memfs_rmdir(const char *path) {
-    std::string child;
-    auto parent = memfs_parent(path, child);
-    if (!parent || parent->type != MemNodeType::Directory) return -ENOENT;
-    auto it = parent->children.find(child);
-    if (it == parent->children.end() || it->second->type != MemNodeType::Directory) return -ENOENT;
-    if (!it->second->children.empty()) return -ENOTEMPTY;
-    parent->children.erase(it);
-    parent->mtime = std::time(0);
-    return 0;
-}
+// -
+struct fuse_operations memfs_oper = {
+    .getattr = memfs_getattr,
+    .readdir = memfs_readdir,
+    .mkdir   = memfs_mkdir,
+    .mknod   = memfs_mknod,
+    .create  = memfs_create,
+    .open    = memfs_open,
+    .read    = memfs_read,
+    .write   = memfs_write,
+    .symlink = memfs_symlink,
+    .readlink= memfs_readlink,
+};
