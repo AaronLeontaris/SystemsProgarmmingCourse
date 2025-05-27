@@ -5,7 +5,7 @@ extern struct fuse_operations memfs_oper;
 
 int main(int argc, char *argv[]) {
     memfs.load();
-    int res = fuse_main(argc, argv, &memfs_oper, nullptr);
+    int res = fuse_main(argc, argv, &memfs_oper);
     memfs.save();
     return res;
 }

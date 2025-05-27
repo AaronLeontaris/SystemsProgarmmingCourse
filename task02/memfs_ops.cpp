@@ -74,13 +74,13 @@ static int memfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
     return 0;
 }
 
-static int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info *, enum fuse_readdir_flags) {
+static int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
     auto node = find_node(path);
     if (!node || node->type != NodeType::Directory) return -ENOENT;
-    filler(buf, ".", nullptr, 0, (fuse_fill_dir_flags)0);
-    filler(buf, "..", nullptr, 0, (fuse_fill_dir_flags)0);
+    filler(buf, ".", nullptr, 0);
+    filler(buf, "..", nullptr, 0);
     for (const auto& [name, child] : node->children) {
-        filler(buf, name.c_str(), nullptr, 0, (fuse_fill_dir_flags)0);
+        filler(buf, name.c_str(), nullptr, 0);
     }
     return 0;
 }
