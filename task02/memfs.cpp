@@ -4,13 +4,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pwd.h>
-#if __has_include(<json/json.h>)
 #include <json/json.h>
-#elif __has_include(<jsoncpp/json/json.h>)
-#include <jsoncpp/json/json.h>
-#else
-#error "jsoncpp headers not found"
-#endif
 
 MemFS memfs;
 
@@ -26,13 +20,13 @@ static void node_to_json(const std::shared_ptr<MemFSNode>& node, Json::Value& jn
     jn["name"] = node->name;
     jn["type"] = (node->type == NodeType::File ? "file" : (node->type == NodeType::Directory ? "dir" : "symlink"));
     jn["data"] = node->data;
-    jn["size"] = (Json::UInt64)node->size;
+    jn["size"] = static_cast<Json::UInt64>(node->size);
     jn["mode"] = node->mode;
     jn["uid"] = node->uid;
     jn["gid"] = node->gid;
-    jn["atime"] = (Json::Int64)node->atime;
-    jn["mtime"] = (Json::Int64)node->mtime;
-    jn["ctime"] = (Json::Int64)node->ctime;
+    jn["atime"] = static_cast<Json::Int64>(node->atime);
+    jn["mtime"] = static_cast<Json::Int64>(node->mtime);
+    jn["ctime"] = static_cast<Json::Int64>(node->ctime);
     if (node->type == NodeType::Directory) {
         for (auto& [n, child] : node->children) {
             Json::Value jc;
@@ -65,7 +59,7 @@ static std::shared_ptr<MemFSNode> node_from_json(const Json::Value& jn, std::wea
     node->ctime = jn["ctime"].asInt64();
     if (t == NodeType::Directory) {
         const Json::Value& jch = jn["children"];
-        for (auto& jc : jch) {
+        for (const auto& jc : jch) {
             auto child = node_from_json(jc, node);
             node->children[child->name] = child;
         }
@@ -82,7 +76,6 @@ std::shared_ptr<MemFSNode> MemFSNode::from_json(const std::string& json, std::we
     return node_from_json(root, parent);
 }
 
-// ---- MemFS ----
 MemFS::MemFS() {
     root = std::make_shared<MemFSNode>("/", NodeType::Directory, 0755, getuid(), getgid(), std::weak_ptr<MemFSNode>());
     root->parent.reset();
@@ -95,7 +88,7 @@ void MemFS::save() {
 
 void MemFS::load() {
     std::ifstream ifs(PERSISTENCE_FILE);
-    if (!ifs) return; // no persistence file yet
+    if (!ifs) return;
     std::stringstream buf;
     buf << ifs.rdbuf();
     std::string content = buf.str();

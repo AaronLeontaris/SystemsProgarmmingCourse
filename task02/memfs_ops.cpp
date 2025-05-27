@@ -21,7 +21,6 @@ static std::vector<std::string> split_path(const char *path) {
     return elems;
 }
 
-// Find node by path
 static std::shared_ptr<MemFSNode> find_node(const char *path) {
     if (strcmp(path, "/") == 0) return memfs.root;
     auto parts = split_path(path);
@@ -33,7 +32,7 @@ static std::shared_ptr<MemFSNode> find_node(const char *path) {
     }
     return curr;
 }
-// Find parent node of a path
+
 static std::shared_ptr<MemFSNode> find_parent(const char *path, std::string& leaf) {
     auto parts = split_path(path);
     if (parts.empty()) return nullptr;
@@ -47,8 +46,6 @@ static std::shared_ptr<MemFSNode> find_parent(const char *path, std::string& lea
     }
     return curr;
 }
-
-// normale Fuse callbasd
 
 static int memfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *) {
     memset(stbuf, 0, sizeof(struct stat));
@@ -74,13 +71,13 @@ static int memfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
     return 0;
 }
 
-static int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+static int memfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info *, enum fuse_readdir_flags) {
     auto node = find_node(path);
     if (!node || node->type != NodeType::Directory) return -ENOENT;
-    filler(buf, ".", nullptr, 0);
-    filler(buf, "..", nullptr, 0);
+    filler(buf, ".", nullptr, 0, (fuse_fill_dir_flags)0);
+    filler(buf, "..", nullptr, 0, (fuse_fill_dir_flags)0);
     for (const auto& [name, child] : node->children) {
-        filler(buf, name.c_str(), nullptr, 0);
+        filler(buf, name.c_str(), nullptr, 0, (fuse_fill_dir_flags)0);
     }
     return 0;
 }
@@ -165,7 +162,6 @@ static int memfs_readlink(const char *path, char *buf, size_t size) {
     return 0;
 }
 
-// -
 struct fuse_operations memfs_oper = {
     .getattr = memfs_getattr,
     .readdir = memfs_readdir,

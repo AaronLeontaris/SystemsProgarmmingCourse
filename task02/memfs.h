@@ -13,7 +13,7 @@
 
 enum class NodeType { File, Directory, Symlink };
 
-struct MemFSNode {
+struct MemFSNode : public std::enable_shared_from_this<MemFSNode> {
     std::string name;
     NodeType type;
     std::string data; // file data or symlink target
@@ -27,7 +27,6 @@ struct MemFSNode {
 
     MemFSNode(const std::string& name, NodeType type, mode_t mode, uid_t uid, gid_t gid, std::weak_ptr<MemFSNode> parent);
 
-    // File serialization helpers
     std::string to_json() const;
     static std::shared_ptr<MemFSNode> from_json(const std::string& json, std::weak_ptr<MemFSNode> parent);
 };

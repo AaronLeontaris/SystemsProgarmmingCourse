@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17 -g -D_FILE_OFFSET_BITS=64 -I/usr/include/jsoncpp
+CXXFLAGS = -Wall -Wextra -std=c++17 -g -D_FILE_OFFSET_BITS=64
 LDFLAGS = -lfuse -ljsoncpp
 
 TARGET = memfs
