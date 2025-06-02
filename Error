@@ -1,12 +1,16 @@
-<stdout>:1211:16: warning: ‘input’ defined but not used [-Wunused-function]
-<stdout>:1168:17: warning: ‘yyunput’ defined but not used [-Wunused-function]
-cc -g -Wall -O2 -c -o main.o main.c
-g++ -g -Wall -O2 -c -o execute.o execute.cpp
-g++ -pthread -o shell parse.o scan.o main.o execute.o -lfl
-/usr/bin/ld: main.o: in function `main':
-/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/main.c:91:(.text.startup+0xb0): undefined reference to `run_builtin'
-/usr/bin/ld: /home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/main.c:118:(.text.startup+0x13b): undefined reference to `run_pipeline'
-collect2: error: ld returned 1 exit status
-make: *** [Makefile:15: shell] Error 1
-rm scan.c parse.c
+make -C tests check
+make[1]: Entering directory '/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests'
+python3 ./test_single_commands.py
+Test running single command 'echo hostname'...
+$ echo 'echo mint
+' |/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/shell
+OK
+Test running single command that does not exist...
+$ echo 'dev_null_foo
+' |/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/shell
+execvp: No such file or directory
+`Test running single command that does not exist` at /home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests/./test_single_commands.py:24 failed with: expected shell error on non-existent executable, got '0'
+make[1]: *** [Makefile:4: check] Error 1
+make[1]: Leaving directory '/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests'
+make: *** [Makefile:27: check] Error 2
 
