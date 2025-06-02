@@ -1,21 +1,16 @@
-yacc -d -t -v -b y -d -t -v -b y parse.y 
-mv -f y.tab.c parse.c
-cc -g -Wall -O2   -c -o parse.o parse.c
-flex  -t scan.l > scan.c
-cc -g -Wall -O2   -c -o scan.o scan.c
-<stdout>:1211:16: warning: ‘input’ defined but not used [-Wunused-function]
-<stdout>:1168:17: warning: ‘yyunput’ defined but not used [-Wunused-function]
 cc -g -Wall -O2   -c -o main.o main.c
-cc -g -Wall -O2   -c -o execute.o execute.c
-execute.c: In function ‘run_pipeline’:
-execute.c:59:16: error: wrong type argument to unary exclamation mark
-   59 |     if (!pl || !pl->first_command) return -1;
-      |                ^
-execute.c:60:27: error: incompatible types when initializing type ‘struct command *’ using type ‘struct command’
-   60 |     struct command *cmd = pl->first_command;
-      |                           ^~
-execute.c:65:9: warning: unused variable ‘status’ [-Wunused-variable]
-   65 |     int status = 0;
-      |         ^~~~~~
-make: *** [<builtin>: execute.o] Error 1
+g++ -g -Wall -O2   -c -o execute.o execute.cpp
+cc -pthread -o shell parse.o scan.o main.o execute.o -lfl
+/usr/bin/ld: execute.o: in function `std::__new_allocator<int>::allocate(unsigned long, void const*)':
+/usr/include/c++/13/bits/new_allocator.h:151:(.text+0x6c): undefined reference to `operator new(unsigned long)'
+/usr/bin/ld: execute.o: in function `std::__new_allocator<int>::deallocate(int*, unsigned long)':
+/usr/include/c++/13/bits/new_allocator.h:172:(.text+0x25a): undefined reference to `operator delete(void*, unsigned long)'
+/usr/bin/ld: /usr/include/c++/13/bits/new_allocator.h:172:(.text.unlikely+0x3a): undefined reference to `operator delete(void*, unsigned long)'
+/usr/bin/ld: execute.o:(.data.rel.local.DW.ref.__gxx_personality_v0[DW.ref.__gxx_personality_v0]+0x0): undefined reference to `__gxx_personality_v0'
+/usr/bin/ld: main.o: in function `main':
+/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/main.c:91:(.text.startup+0xb0): undefined reference to `run_builtin'
+/usr/bin/ld: /home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/main.c:118:(.text.startup+0x13b): undefined reference to `run_pipeline'
+collect2: error: ld returned 1 exit status
+make: *** [c.make:21: shell] Error 1
+rm scan.c parse.c
 
