@@ -1,0 +1,27 @@
+# Set you prefererred CFLAGS/compiler compiler here.
+# Our github runner provides gcc-10 by default.
+CC ?= cc
+CFLAGS ?= -g -Wall -O2
+CXX ?= c++
+CXXFLAGS ?= -g -Wall -O2
+CARGO ?= cargo
+RUSTFLAGS ?= -g
+LDFLAGS ?= -pthread
+# CPPFLAGS += -DYYDEBUG -DDEBUG
+
+all: shell
+
+shell: parse.o scan.o main.o execute.o
+	$(CXX) $(LDFLAGS) -o $@ $^ -lfl
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+clean:
+	rm -f *.o shell
+
+check: all
+	$(MAKE) -C tests check
