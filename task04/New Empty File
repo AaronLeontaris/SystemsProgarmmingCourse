@@ -1,0 +1,21 @@
+Checking mutual exclusion...
+$ /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_mutual_exclusion
+python3 /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_lockhashmap.py
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d20000 -i10000 -n4 -r10000 -u100 -b1 > /tmp/tmpqztpw35m/stdout
+Checking 1 thread time...
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n1 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n1 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n1 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+Checking 2 thread time...
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n2 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n2 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n2 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+Checking 4 thread time...
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n4 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n4 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+$ LD_LIBRARY_PATH=/home/mint/Desktop/task4-concurrency-AaronLeontaris /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lock_hashmap -d2000000 -i100000 -n4 -r100000 -u10 > /tmp/tmpqztpw35m/stdout
+Hashmap is not scaling properly: [9.296005, 4.717331, 5.848375]
+make[1]: *** [Makefile:28: check] Error 1
+make[1]: Leaving directory '/home/mint/Desktop/task4-concurrency-AaronLeontaris/tests'
+make: *** [Makefile:26: check] Error 2
+
