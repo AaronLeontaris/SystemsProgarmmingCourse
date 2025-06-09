@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// Node for each value in the list
+// Node structure for bucket list
 typedef struct Node_HM_t {
     long m_val;
     char padding[PAD];
@@ -21,7 +21,7 @@ struct hm_t {
     size_t n_buckets;
 };
 
-// Hash function, mixes bits for better spread
+// Hash function with mixing
 static size_t hash(long val, size_t n_buckets) {
     unsigned long x = (unsigned long)val;
     x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -80,30 +80,33 @@ int insert_item(HM* hm, long val) {
     Node_HM* sentinel = atomic_load(&bucket->sentinel);
 
     while (1) {
-        // Check if val is already present (lock-free traversal)
+        // 1. Check if val already present
         Node_HM* curr = atomic_load(&sentinel->m_next);
+        int found = 0;
         while (curr) {
             if (curr->m_val == val) {
-                // Already present, do not insert
-                return 1;
+                found = 1;
+                break;
             }
             curr = atomic_load(&curr->m_next);
         }
+        if (found) return 1; // Already present, do not insert
 
-        // Prepare new node
+        // 2. Allocate and attempt CAS insert
         Node_HM* new_node = malloc(sizeof(Node_HM));
         if (!new_node) return 1;
         new_node->m_val = val;
 
-        // Attempt to insert at head
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
         if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
             return 0;
         }
-        // CAS failed, free node and retry (possible duplicate inserted in the meantime)
+        // CAS failed: another thread inserted something, possibly the same value
+
+        // 3. Free the unused node and loop (recheck for duplicates!)
         free(new_node);
-        // retry loop: will recheck for duplicates before trying again
+        // loop to recheck for duplicate & try again
     }
 }
 
