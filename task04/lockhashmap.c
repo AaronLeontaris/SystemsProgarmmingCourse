@@ -3,26 +3,35 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// node for each value in the list
 typedef struct Node_HM_t {
     long m_val;
     char padding[PAD];
     struct Node_HM_t* m_next;
 } Node_HM;
 
+// one lock and sentinel per bucket
 typedef struct List_t {
     Node_HM* sentinel;
     cspinlock_t* lock;
 } List;
 
+// hashmap struct
 struct hm_t {
     List** buckets;
     size_t n_buckets;
 };
 
+// hash function, mixes bits for better spread
 static size_t hash(long val, size_t n_buckets) {
-    return ((unsigned long)val) % n_buckets;
+    unsigned long x = (unsigned long)val;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x % n_buckets;
 }
 
+// allocate hashmap, each bucket gets lock and sentinel
 HM* alloc_hashmap(size_t n_buckets) {
     HM* hm = malloc(sizeof(HM));
     if (!hm) return NULL;
@@ -44,6 +53,7 @@ HM* alloc_hashmap(size_t n_buckets) {
     return hm;
 }
 
+// free all buckets, nodes and locks
 void free_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
@@ -51,9 +61,9 @@ void free_hashmap(HM* hm) {
         if (bucket) {
             Node_HM* node = bucket->sentinel;
             while (node) {
-                Node_HM* tmp = node;
-                node = node->m_next;
-                free(tmp);
+                Node_HM* tmp = node->m_next;
+                free(node);
+                node = tmp;
             }
             cspin_free(bucket->lock);
             free(bucket);
@@ -63,6 +73,7 @@ void free_hashmap(HM* hm) {
     free(hm);
 }
 
+// insert at head of bucket list, lock per bucket
 int insert_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -81,6 +92,7 @@ int insert_item(HM* hm, long val) {
     return 0;
 }
 
+// remove item if found, lock per bucket
 int remove_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -103,6 +115,7 @@ int remove_item(HM* hm, long val) {
     return 1;
 }
 
+// search item, lock per bucket
 int lookup_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -121,6 +134,7 @@ int lookup_item(HM* hm, long val) {
     return 1;
 }
 
+// print all buckets and their items, lock per bucket
 void print_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
