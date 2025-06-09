@@ -1,0 +1,8 @@
+libcspinlock.so: cspinlock.c cspinlock.h
+	$(CC) -fPIC -shared -o $@ cspinlock.c
+
+liblockhashmap.so: lockhashmap.c cspinlock.c chashmap.h cspinlock.h
+	$(CC) -fPIC -shared -o $@ lockhashmap.c cspinlock.c
+
+liblockfreehashmap.so: lockfreehashmap.c chashmap.h
+	$(CC) -fPIC -shared -o $@ lockfreehashmap.c
