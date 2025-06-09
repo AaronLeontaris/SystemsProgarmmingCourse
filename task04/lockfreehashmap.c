@@ -100,9 +100,7 @@ int insert_item(HM* hm, long val) {
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
 
-        if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
-            // Succeeded: double-check value is in list and return 0
-            // (Not strictly needed, but helps with tricky tests)
+        if (atomic_compare_exchange_strong(&sentinel->m_next, &old_head, new_node)) {
             return 0;
         }
         free(new_node);
@@ -110,7 +108,7 @@ int insert_item(HM* hm, long val) {
     }
 }
 
-// Remove item, lock-free: just unlink, do NOT free node (avoid double-free)
+// Remove item, lock-free: just unlink and free node!
 int remove_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -124,12 +122,10 @@ int remove_item(HM* hm, long val) {
     while (curr) {
         if (curr->m_val == val) {
             Node_HM* next = atomic_load(&curr->m_next);
-            // CAS: unlink node, do not free here
-            if (atomic_compare_exchange_weak(&prev->m_next, &curr, next)) {
-                // do NOT free(curr);  // not safe: can lead to double-free
+            if (atomic_compare_exchange_strong(&prev->m_next, &curr, next)) {
+                free(curr); // immediate free on successful remove
                 return 0;
             }
-            // CAS failed, reload curr
             curr = atomic_load(&prev->m_next);
             continue;
         }
