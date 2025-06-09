@@ -3,25 +3,25 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// node struct for list per bucket
+// Node for each value in the list
 typedef struct Node_HM_t {
     long m_val;
     char padding[PAD];
     _Atomic(struct Node_HM_t*) m_next;
 } Node_HM;
 
-// list struct for each bucket
+// One sentinel per bucket
 typedef struct List_t {
     _Atomic(Node_HM*) sentinel;
 } List;
 
-// hashmap struct
+// Hashmap struct
 struct hm_t {
     List** buckets;
     size_t n_buckets;
 };
 
-// hash function with mixing
+// Hash function, mixes bits for better spread
 static size_t hash(long val, size_t n_buckets) {
     unsigned long x = (unsigned long)val;
     x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -30,7 +30,7 @@ static size_t hash(long val, size_t n_buckets) {
     return x % n_buckets;
 }
 
-// allocate hashmap, each bucket gets its own sentinel node
+// Allocate hashmap, each bucket gets its own sentinel node
 HM* alloc_hashmap(size_t n_buckets) {
     HM* hm = malloc(sizeof(HM));
     if (!hm) return NULL;
@@ -51,7 +51,7 @@ HM* alloc_hashmap(size_t n_buckets) {
     return hm;
 }
 
-// free all lists and nodes after threads are finished
+// Free all lists and nodes after threads are finished
 void free_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
@@ -70,7 +70,7 @@ void free_hashmap(HM* hm) {
     free(hm);
 }
 
-// insert at head, lock-free using CAS, only if value is not already present
+// Insert at head, lock-free using CAS, only if value is not already present
 int insert_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -79,40 +79,35 @@ int insert_item(HM* hm, long val) {
 
     Node_HM* sentinel = atomic_load(&bucket->sentinel);
 
-    // Check if val is already present (lock-free traversal)
-    Node_HM* curr = atomic_load(&sentinel->m_next);
-    while (curr) {
-        if (curr->m_val == val) {
-            // Already present, do not insert
-            return 1;
-        }
-        curr = atomic_load(&curr->m_next);
-    }
-
-    // Not present, try to insert at head
-    Node_HM* new_node = malloc(sizeof(Node_HM));
-    if (!new_node) return 1;
-    new_node->m_val = val;
-
     while (1) {
+        // Check if val is already present (lock-free traversal)
+        Node_HM* curr = atomic_load(&sentinel->m_next);
+        while (curr) {
+            if (curr->m_val == val) {
+                // Already present, do not insert
+                return 1;
+            }
+            curr = atomic_load(&curr->m_next);
+        }
+
+        // Prepare new node
+        Node_HM* new_node = malloc(sizeof(Node_HM));
+        if (!new_node) return 1;
+        new_node->m_val = val;
+
+        // Attempt to insert at head
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
         if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
             return 0;
         }
-        // If CAS failed, another insert may have happened; check for duplicates again
-        curr = atomic_load(&sentinel->m_next);
-        while (curr) {
-            if (curr->m_val == val) {
-                free(new_node); // Node not needed
-                return 1;
-            }
-            curr = atomic_load(&curr->m_next);
-        }
+        // CAS failed, free node and retry (possible duplicate inserted in the meantime)
+        free(new_node);
+        // retry loop: will recheck for duplicates before trying again
     }
 }
 
-// remove item, lock-free: just unlink, do NOT free node (avoid double-free)
+// Remove item, lock-free: just unlink, do NOT free node (avoid double-free)
 int remove_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -141,7 +136,7 @@ int remove_item(HM* hm, long val) {
     return 1;
 }
 
-// lookup item, lock-free traversal
+// Lookup item, lock-free traversal
 int lookup_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -158,7 +153,7 @@ int lookup_item(HM* hm, long val) {
     return 1;
 }
 
-// print all buckets, lock-free
+// Print all buckets, lock-free
 void print_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
