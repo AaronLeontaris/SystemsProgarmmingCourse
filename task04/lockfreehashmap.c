@@ -70,27 +70,45 @@ void free_hashmap(HM* hm) {
     free(hm);
 }
 
-// insert at head, lock-free using CAS
+// insert at head, lock-free using CAS, only if value is not already present
 int insert_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
     List* bucket = hm->buckets[idx];
     if (!bucket) return 1;
 
+    Node_HM* sentinel = atomic_load(&bucket->sentinel);
+
+    // Check if val is already present (lock-free traversal)
+    Node_HM* curr = atomic_load(&sentinel->m_next);
+    while (curr) {
+        if (curr->m_val == val) {
+            // Already present, do not insert
+            return 1;
+        }
+        curr = atomic_load(&curr->m_next);
+    }
+
+    // Not present, try to insert at head
     Node_HM* new_node = malloc(sizeof(Node_HM));
     if (!new_node) return 1;
     new_node->m_val = val;
 
-    Node_HM* sentinel = atomic_load(&bucket->sentinel);
-
     while (1) {
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
-        // CAS: install at head
         if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
             return 0;
         }
-        // retry if CAS failed
+        // If CAS failed, another insert may have happened; check for duplicates again
+        curr = atomic_load(&sentinel->m_next);
+        while (curr) {
+            if (curr->m_val == val) {
+                free(new_node); // Node not needed
+                return 1;
+            }
+            curr = atomic_load(&curr->m_next);
+        }
     }
 }
 
