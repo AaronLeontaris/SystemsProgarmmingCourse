@@ -1,4 +1,6 @@
-Hashmap has more items than expected 
+$ /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_cleanup_lockfree > /tmp/tmpb199xycv/stdout
+Hashmap did not insert item 53157492
+`Checking if hashmap cleans up items when removing` at /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_lockfreehashmap.py:86 failed with: Command '['/home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_cleanup_lockfree']' returned non-zero exit status 1.
 make[1]: *** [Makefile:29: check] Error 1
 make[1]: Leaving directory '/home/mint/Desktop/task4-concurrency-AaronLeontaris/tests'
 make: *** [Makefile:26: check] Error 2
