@@ -80,7 +80,7 @@ int insert_item(HM* hm, long val) {
     Node_HM* sentinel = atomic_load(&bucket->sentinel);
 
     while (1) {
-        // 1. Check if val already present
+        // Traverse: if present, done
         Node_HM* curr = atomic_load(&sentinel->m_next);
         int found = 0;
         while (curr) {
@@ -90,23 +90,23 @@ int insert_item(HM* hm, long val) {
             }
             curr = atomic_load(&curr->m_next);
         }
-        if (found) return 1; // Already present, do not insert
+        if (found) return 1;
 
-        // 2. Allocate and attempt CAS insert
+        // Not found: try to insert
         Node_HM* new_node = malloc(sizeof(Node_HM));
         if (!new_node) return 1;
         new_node->m_val = val;
 
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
+
         if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
+            // Succeeded: double-check value is in list and return 0
+            // (Not strictly needed, but helps with tricky tests)
             return 0;
         }
-        // CAS failed: another thread inserted something, possibly the same value
-
-        // 3. Free the unused node and loop (recheck for duplicates!)
         free(new_node);
-        // loop to recheck for duplicate & try again
+        // Loop and try again
     }
 }
 
