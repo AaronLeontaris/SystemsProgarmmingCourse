@@ -1,9 +1,4 @@
-00000 -n4 -r100000 -u10 > /tmp/tmp13xti_4k/stdout
-python3 /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_lockfreehashmap.py
-Checking correctness...
-$ /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lockfree_hashmap -d20000 -i10000 -n4 -r10000 -u100 -b1 > /tmp/tmppso9s1bw/stdout
-free(): unaligned chunk detected in tcache 2
-`Checking correctness` at /home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/test_lockfreehashmap.py:31 failed with: Command '['/home/mint/Desktop/task4-concurrency-AaronLeontaris/tests/lockfree_hashmap', '-d20000', '-i10000', '-n4', '-r10000', '-u100', '-b1']' died with <Signals.SIGABRT: 6>.
+Hashmap has more items than expected 
 make[1]: *** [Makefile:29: check] Error 1
 make[1]: Leaving directory '/home/mint/Desktop/task4-concurrency-AaronLeontaris/tests'
 make: *** [Makefile:26: check] Error 2
