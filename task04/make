@@ -1,8 +1,30 @@
+# Set you prefererred CFLAGS/compiler compiler here.
+# Our github runner provides gcc-10 by default.
+CC ?= cc
+CFLAGS ?= -g -Wall -O2
+CXX ?= c++
+CXXFLAGS ?= -g -Wall -O2
+CARGO ?= cargo
+RUSTFLAGS ?= -g
+
+# this target should build all executables for all tests
+all: libcspinlock.so liblockhashmap.so liblockfreehashmap.so
+
 libcspinlock.so: cspinlock.c cspinlock.h
-	$(CC) -fPIC -shared -o $@ cspinlock.c
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ cspinlock.c
 
 liblockhashmap.so: lockhashmap.c cspinlock.c chashmap.h cspinlock.h
-	$(CC) -fPIC -shared -o $@ lockhashmap.c cspinlock.c
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ lockhashmap.c cspinlock.c
 
 liblockfreehashmap.so: lockfreehashmap.c chashmap.h
-	$(CC) -fPIC -shared -o $@ lockfreehashmap.c
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ lockfreehashmap.c
+
+.PHONY: all clean check
+
+# Usually there is no need to modify this
+check: all
+	$(MAKE) -C tests check
+
+clean:
+	$(MAKE) -C tests clean
+	rm -rf *.so* *.o
