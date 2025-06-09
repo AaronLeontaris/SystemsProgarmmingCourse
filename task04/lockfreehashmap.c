@@ -3,25 +3,34 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// node struct for list per bucket
 typedef struct Node_HM_t {
     long m_val;
     char padding[PAD];
     _Atomic(struct Node_HM_t*) m_next;
 } Node_HM;
 
+// list struct for each bucket
 typedef struct List_t {
     _Atomic(Node_HM*) sentinel;
 } List;
 
+// hashmap struct
 struct hm_t {
     List** buckets;
     size_t n_buckets;
 };
 
+// hash function with mixing
 static size_t hash(long val, size_t n_buckets) {
-    return ((unsigned long)val) % n_buckets;
+    unsigned long x = (unsigned long)val;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x % n_buckets;
 }
 
+// allocate hashmap, each bucket gets its own sentinel node
 HM* alloc_hashmap(size_t n_buckets) {
     HM* hm = malloc(sizeof(HM));
     if (!hm) return NULL;
@@ -42,6 +51,7 @@ HM* alloc_hashmap(size_t n_buckets) {
     return hm;
 }
 
+// free all lists and nodes after threads are finished
 void free_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
@@ -60,6 +70,7 @@ void free_hashmap(HM* hm) {
     free(hm);
 }
 
+// insert at head, lock-free using CAS
 int insert_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -75,13 +86,15 @@ int insert_item(HM* hm, long val) {
     while (1) {
         Node_HM* old_head = atomic_load(&sentinel->m_next);
         new_node->m_next = old_head;
+        // CAS: install at head
         if (atomic_compare_exchange_weak(&sentinel->m_next, &old_head, new_node)) {
             return 0;
         }
-        // CAS failed, retry
+        // retry if CAS failed
     }
 }
 
+// remove item, lock-free: just unlink, do NOT free node (avoid double-free)
 int remove_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -95,8 +108,9 @@ int remove_item(HM* hm, long val) {
     while (curr) {
         if (curr->m_val == val) {
             Node_HM* next = atomic_load(&curr->m_next);
+            // CAS: unlink node, do not free here
             if (atomic_compare_exchange_weak(&prev->m_next, &curr, next)) {
-                free(curr);
+                // do NOT free(curr);  // not safe: can lead to double-free
                 return 0;
             }
             // CAS failed, reload curr
@@ -109,6 +123,7 @@ int remove_item(HM* hm, long val) {
     return 1;
 }
 
+// lookup item, lock-free traversal
 int lookup_item(HM* hm, long val) {
     if (!hm) return 1;
     size_t idx = hash(val, hm->n_buckets);
@@ -125,6 +140,7 @@ int lookup_item(HM* hm, long val) {
     return 1;
 }
 
+// print all buckets, lock-free
 void print_hashmap(HM* hm) {
     if (!hm) return;
     for (size_t i = 0; i < hm->n_buckets; ++i) {
