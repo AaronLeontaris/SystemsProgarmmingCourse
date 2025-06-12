@@ -1,18 +1,6 @@
-int@mint:~/Desktop/task5-memory-AaronLeontaris$ make all
-cc -g -Wall -O2 -shared -fPIC -ldl -lpthread -o libmymalloc.so task5-memory.c
-task5-memory.c: In function ‘extend_heap_size’:
-task5-memory.c:45:11: warning: unused variable ‘old_end’ [-Wunused-variable]
-   45 |     void *old_end = sbrk(0);
-      |           ^~~~~~~
-task5-memory.c: At top level:
-task5-memory.c:277:7: error: redefinition of ‘extend_heap_size’
-  277 | void *extend_heap_size(size_t size) {
-      |       ^~~~~~~~~~~~~~~~
-task5-memory.c:44:14: note: previous definition of ‘extend_heap_size’ with type ‘void *(size_t)’ {aka ‘void *(long unsigned int)’}
-   44 | static void *extend_heap_size(size_t size) {
-      |              ^~~~~~~~~~~~~~~~
-task5-memory.c: In function ‘extend_heap_size’:
-task5-memory.c:278:11: warning: unused variable ‘current_base’ [-Wunused-variable]
-  278 |     void *current_base = sbrk(0);
-      |           ^~~~~~~~~~~~
+Fatal: failed to allocate 2000 bytes.
+`Run alloc_realloc_free_medium with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded` at /home/mint/Desktop/task5-memory-AaronLeontaris/tests/reuse_freed.py:41 failed with: Command '['/home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_medium']' returned non-zero exit status 1.
+make[1]: *** [Makefile:15: check] Error 1
+make[1]: Leaving directory '/home/mint/Desktop/task5-memory-AaronLeontaris/tests'
+make: *** [Makefile:30: check] Error 2
 
