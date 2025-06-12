@@ -1,16 +1,61 @@
+mint@mint:~/Desktop/task5-memory-AaronLeontaris$ make check
 make -C tests check
-make[1]: Entering directory '/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests'
-python3 ./test_single_commands.py
-Test running single command 'echo hostname'...
-$ echo 'echo mint
-' |/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/shell
-OK
-Test running single command that does not exist...
-$ echo 'dev_null_foo
-' |/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/shell
-execvp: No such file or directory
-`Test running single command that does not exist` at /home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests/./test_single_commands.py:24 failed with: expected shell error on non-existent executable, got '0'
-make[1]: *** [Makefile:4: check] Error 1
-make[1]: Leaving directory '/home/mint/Documents/SystemsProg/task3-processes-AaronLeontaris/tests'
-make: *** [Makefile:27: check] Error 2
+make[1]: Entering directory '/home/mint/Desktop/task5-memory-AaronLeontaris/tests'
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_simple /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_simple.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_simple /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_simple.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_simple /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_simple.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_1 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_1.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_2 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_2.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_3 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_3.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_medium /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_medium.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_medium /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_medium.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_medium /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_medium.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing_multiple /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing_multiple.c
+cc -O2 -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest.c -lpthread
+g++ -O2 -w -Og -g -o /home/mint/Desktop/task5-memory-AaronLeontaris/tests/larson /home/mint/Desktop/task5-memory-AaronLeontaris/tests/larson.cpp -lpthread
+python3 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/basic_func.py
+Check that malloc,realloc,free,calloc functions are available in libmymalloc.so...
+$ nm -D --defined-only /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so > /tmp/tmpm62d83bu/stdout
+Run alloc_free_simple with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_simple
+Run calloc_free_simple with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_simple
+Run alloc_realloc_free_simple with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_simple
+Run overlap_check_1 with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_1
+Run overlap_check_2 with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_2
+Run overlap_check_3 with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/overlap_check_3
+python3 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/reuse_freed.py
+Check that malloc,realloc,free,calloc functions are available in libmymalloc.so...
+$ nm -D --defined-only /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so > /tmp/tmplffbyh3s/stdout
+Run alloc_free_medium with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_free_medium
+Run calloc_free_medium with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/calloc_free_medium
+Run alloc_realloc_free_medium with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_medium
+python3 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/merge_blocks.py
+Check that malloc,realloc,free,calloc functions are available in libmymalloc.so...
+$ nm -D --defined-only /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so > /tmp/tmpfm70gkbh/stdout
+Run coalescing with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing
+Run coalescing_multiple with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/coalescing_multiple
+python3 /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest.py
+Check that malloc,realloc,free,calloc functions are available in libmymalloc.so...
+$ nm -D --defined-only /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so > /tmp/tmpo527mhhm/stdout
+Run threadtest with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded with 1 thread(s)...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest 1 > /tmp/tmpo527mhhm/stdout
+Run threadtest with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded with 2 thread(s)...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest 2 > /tmp/tmpo527mhhm/stdout
+Run threadtest with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded with 4 thread(s)...
+$ LD_PRELOAD=/home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so /home/mint/Desktop/task5-memory-AaronLeontaris/tests/threadtest 4 > /tmp/tmpo527mhhm/stdout
+Allocator does not scale properly. Execution times : [80.127502, 100.591712, 109.162744]
+make[1]: *** [Makefile:17: check] Error 1
+make[1]: Leaving directory '/home/mint/Desktop/task5-memory-AaronLeontaris/tests'
+make: *** [Makefile:30: check] Error 2
 
