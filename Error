@@ -1,6 +1,5 @@
-Fatal: failed to allocate 2000 bytes.
+atal: failed to allocate 2000 bytes.
 `Run alloc_realloc_free_medium with /home/mint/Desktop/task5-memory-AaronLeontaris/libmymalloc.so preloaded` at /home/mint/Desktop/task5-memory-AaronLeontaris/tests/reuse_freed.py:41 failed with: Command '['/home/mint/Desktop/task5-memory-AaronLeontaris/tests/alloc_realloc_free_medium']' returned non-zero exit status 1.
 make[1]: *** [Makefile:15: check] Error 1
 make[1]: Leaving directory '/home/mint/Desktop/task5-memory-AaronLeontaris/tests'
-make: *** [Makefile:30: check] Error 2
 
