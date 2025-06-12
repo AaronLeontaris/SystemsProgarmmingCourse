@@ -40,13 +40,10 @@ static int is_valid_block(block_t *block) {
     return 1;
 }
 
-// sbrk wrapper with heap tracking
-static void *extend_heap_size(size_t size) {
-    void *old_end = sbrk(0);
+// keeping the original signature
+void *extend_heap_size(size_t size) {
     void *new_mem = sbrk(size);
-    if (new_mem == (void*)-1) {
-        return NULL;
-    }
+    assert(new_mem != (void *)-1);
     
     if (!heap.start) {
         heap.start = new_mem;
@@ -271,12 +268,4 @@ void *realloc(void *ptr, size_t size) {
         free(ptr);
     }
     return new_ptr;
-}
-
-// OG Interface....
-void *extend_heap_size(size_t size) {
-    void *current_base = sbrk(0);
-    void *extended = sbrk(size);
-    assert(extended != (void *)-1);
-    return extended;
 }
