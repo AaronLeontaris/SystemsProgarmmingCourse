@@ -86,6 +86,14 @@ static int recv_all(int sockfd, void *buffer, size_t size) {
     while (received < size) {
         ssize_t result = recv(sockfd, buf + received, size - received, 0);
         if (result <= 0) {
+            // Check if we need to retry due to EINTR
+            if (result < 0 && errno == EINTR)
+                continue;
+                
+            // Check if non-blocking socket would block
+            if (result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                continue;
+                
             return 1; // Error or connection closed
         }
         received += result;
@@ -101,6 +109,14 @@ static int send_all(int sockfd, const void *buffer, size_t size) {
     while (sent < size) {
         ssize_t result = send(sockfd, buf + sent, size - sent, 0);
         if (result <= 0) {
+            // Check if we need to retry due to EINTR
+            if (result < 0 && errno == EINTR)
+                continue;
+                
+            // Check if non-blocking socket would block
+            if (result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                continue;
+                
             return 1; // Error
         }
         sent += result;

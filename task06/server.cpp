@@ -14,43 +14,69 @@
 
 std::atomic<int64_t> global_counter{0};
 std::mutex print_mutex;
+std::mutex assign_mutex;
+std::atomic<int> connection_count{0};
+
+// Set socket to non-blocking mode
+int set_nonblocking(int sockfd) {
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    if (flags == -1) return -1;
+    return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+}
 
 void server_thread(int thread_id, int listen_sockfd, int num_threads) {
     fd_set read_fds, master_fds;
     int max_fd = listen_sockfd;
-    std::map<int, int> client_sockets; // socket -> thread assignment
+    std::map<int, bool> client_sockets; // socket -> managed by this thread
     
     FD_ZERO(&master_fds);
     FD_SET(listen_sockfd, &master_fds);
     
-    int connection_count = 0;
+    struct timeval timeout;
     
     while (true) {
         read_fds = master_fds;
         
-        int activity = select(max_fd + 1, &read_fds, nullptr, nullptr, nullptr);
+        // Set a short timeout to avoid blocking indefinitely
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 100000; // 100ms
+        
+        int activity = select(max_fd + 1, &read_fds, nullptr, nullptr, &timeout);
         if (activity < 0) {
             std::lock_guard<std::mutex> lock(print_mutex);
             std::cerr << "Select error in thread " << thread_id << std::endl;
-            break;
+            continue; // Don't break, just try again
         }
         
         // Check for new connections on listening socket
         if (FD_ISSET(listen_sockfd, &read_fds)) {
             int client_sockfd = accept_connection(listen_sockfd);
             if (client_sockfd >= 0) {
+                // Set socket to non-blocking mode
+                if (set_nonblocking(client_sockfd) < 0) {
+                    close(client_sockfd);
+                    continue;
+                }
+                
+                // Thread-safe connection count increment and assignment
+                int conn_id;
+                {
+                    std::lock_guard<std::mutex> lock(assign_mutex);
+                    conn_id = connection_count++;
+                }
+                
                 // Assign connection to thread based on connection count
-                int assigned_thread = connection_count % num_threads;
+                int assigned_thread = conn_id % num_threads;
+                
                 if (assigned_thread == thread_id) {
                     // This connection is assigned to current thread
                     FD_SET(client_sockfd, &master_fds);
-                    client_sockets[client_sockfd] = thread_id;
+                    client_sockets[client_sockfd] = true;
                     max_fd = std::max(max_fd, client_sockfd);
                 } else {
                     // This connection is not for this thread, close it
                     close(client_sockfd);
                 }
-                connection_count++;
             }
         }
         
@@ -127,6 +153,13 @@ int main(int argc, char* argv[]) {
     int listen_sockfd = listening_socket(port);
     if (listen_sockfd < 0) {
         std::cerr << "Failed to create listening socket" << std::endl;
+        return 1;
+    }
+    
+    // Set listening socket to non-blocking
+    if (set_nonblocking(listen_sockfd) < 0) {
+        std::cerr << "Failed to set listening socket to non-blocking mode" << std::endl;
+        close(listen_sockfd);
         return 1;
     }
     
