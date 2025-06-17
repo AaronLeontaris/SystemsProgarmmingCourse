@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <errno.h>
 
 extern "C" {
 
@@ -82,21 +83,35 @@ int accept_connection(int sockfd) {
 static int recv_all(int sockfd, void *buffer, size_t size) {
     char *buf = (char*)buffer;
     size_t received = 0;
+    int retries = 0;
+    const int MAX_RETRIES = 1000; // Prevent infinite loops
     
     while (received < size) {
         ssize_t result = recv(sockfd, buf + received, size - received, 0);
-        if (result <= 0) {
-            // Check if we need to retry due to EINTR
-            if (result < 0 && errno == EINTR)
+        
+        if (result > 0) {
+            received += result;
+            retries = 0; // Reset retry counter on successful read
+        } else if (result == 0) {
+            return 1; // Connection closed
+        } else {
+            // Error handling
+            if (errno == EINTR) {
+                continue; // Interrupted, try again
+            }
+            
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Socket would block, let's wait a bit and retry
+                usleep(1000); // 1ms sleep to avoid busy waiting
+                retries++;
+                if (retries > MAX_RETRIES) {
+                    return 1; // Too many retries, give up
+                }
                 continue;
-                
-            // Check if non-blocking socket would block
-            if (result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-                continue;
-                
-            return 1; // Error or connection closed
+            }
+            
+            return 1; // Other error
         }
-        received += result;
     }
     return 0;
 }
@@ -105,21 +120,35 @@ static int recv_all(int sockfd, void *buffer, size_t size) {
 static int send_all(int sockfd, const void *buffer, size_t size) {
     const char *buf = (const char*)buffer;
     size_t sent = 0;
+    int retries = 0;
+    const int MAX_RETRIES = 1000; // Prevent infinite loops
     
     while (sent < size) {
         ssize_t result = send(sockfd, buf + sent, size - sent, 0);
-        if (result <= 0) {
-            // Check if we need to retry due to EINTR
-            if (result < 0 && errno == EINTR)
+        
+        if (result > 0) {
+            sent += result;
+            retries = 0; // Reset retry counter on successful write
+        } else if (result == 0) {
+            return 1; // Strange case, not expected in send()
+        } else {
+            // Error handling
+            if (errno == EINTR) {
+                continue; // Interrupted, try again
+            }
+            
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Socket would block, let's wait a bit and retry
+                usleep(1000); // 1ms sleep to avoid busy waiting
+                retries++;
+                if (retries > MAX_RETRIES) {
+                    return 1; // Too many retries, give up
+                }
                 continue;
-                
-            // Check if non-blocking socket would block
-            if (result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-                continue;
-                
-            return 1; // Error
+            }
+            
+            return 1; // Other error
         }
-        sent += result;
     }
     return 0;
 }
@@ -133,6 +162,11 @@ int recv_msg(int sockfd, int32_t *operation_type, int64_t *argument) {
     
     // Convert from network byte order
     msg_size = ntohl(msg_size);
+    
+    // Sanity check to avoid allocating too much memory
+    if (msg_size > 1024 * 1024) { // 1MB limit
+        return 1;
+    }
     
     // Allocate buffer for the protobuf message
     char *buffer = new char[msg_size];

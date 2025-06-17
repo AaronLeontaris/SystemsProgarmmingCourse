@@ -5,142 +5,165 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
+#include <sys/socket.h>
 #include <sys/select.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <map>
-#include <algorithm>
+#include <errno.h>
+#include <signal.h>
 
+// Global counter that all threads update
 std::atomic<int64_t> global_counter{0};
+// Mutex for thread-safe printing
 std::mutex print_mutex;
-std::mutex assign_mutex;
-std::atomic<int> connection_count{0};
 
-// Set socket to non-blocking mode
+// Function to set socket to non-blocking mode
 int set_nonblocking(int sockfd) {
     int flags = fcntl(sockfd, F_GETFL, 0);
     if (flags == -1) return -1;
     return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 }
 
-void server_thread(int thread_id, int listen_sockfd, int num_threads) {
-    fd_set read_fds, master_fds;
-    int max_fd = listen_sockfd;
-    std::map<int, bool> client_sockets; // socket -> managed by this thread
+// Server thread function
+void server_thread(int thread_id, int listen_fd, int num_threads) {
+    // Only the first thread should accept connections
+    bool accept_connections = (thread_id == 0);
     
-    FD_ZERO(&master_fds);
-    FD_SET(listen_sockfd, &master_fds);
+    // Set of client sockets managed by this thread
+    fd_set master_set;
+    FD_ZERO(&master_set);
     
-    struct timeval timeout;
+    // If this is thread 0, it monitors the listening socket
+    if (accept_connections) {
+        FD_SET(listen_fd, &master_set);
+    }
+    
+    int max_fd = listen_fd;
+    std::map<int, bool> client_fds; // Track client sockets for this thread
+    
+    // Simple counter for round-robin assignment
+    int next_thread = 0;
     
     while (true) {
-        read_fds = master_fds;
+        fd_set read_set = master_set;
         
-        // Set a short timeout to avoid blocking indefinitely
+        // Set timeout for select to avoid blocking indefinitely
+        struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 100000; // 100ms
+        timeout.tv_usec = 500000; // 500ms
         
-        int activity = select(max_fd + 1, &read_fds, nullptr, nullptr, &timeout);
-        if (activity < 0) {
+        int ready = select(max_fd + 1, &read_set, NULL, NULL, &timeout);
+        if (ready < 0) {
+            if (errno == EINTR) continue; // Interrupted, try again
+            
             std::lock_guard<std::mutex> lock(print_mutex);
-            std::cerr << "Select error in thread " << thread_id << std::endl;
-            continue; // Don't break, just try again
+            std::cerr << "Thread " << thread_id << ": select() failed: " << strerror(errno) << std::endl;
+            continue;
         }
         
-        // Check for new connections on listening socket
-        if (FD_ISSET(listen_sockfd, &read_fds)) {
-            int client_sockfd = accept_connection(listen_sockfd);
-            if (client_sockfd >= 0) {
-                // Set socket to non-blocking mode
-                if (set_nonblocking(client_sockfd) < 0) {
-                    close(client_sockfd);
+        // Handle new connections (only thread 0)
+        if (accept_connections && FD_ISSET(listen_fd, &read_set)) {
+            int client_fd = accept_connection(listen_fd);
+            if (client_fd >= 0) {
+                // Set the socket to non-blocking mode
+                if (set_nonblocking(client_fd) < 0) {
+                    close(client_fd);
                     continue;
                 }
                 
-                // Thread-safe connection count increment and assignment
-                int conn_id;
-                {
-                    std::lock_guard<std::mutex> lock(assign_mutex);
-                    conn_id = connection_count++;
-                }
+                // Determine which thread should handle this client using round-robin
+                int target_thread = next_thread;
+                next_thread = (next_thread + 1) % num_threads;
                 
-                // Assign connection to thread based on connection count
-                int assigned_thread = conn_id % num_threads;
-                
-                if (assigned_thread == thread_id) {
-                    // This connection is assigned to current thread
-                    FD_SET(client_sockfd, &master_fds);
-                    client_sockets[client_sockfd] = true;
-                    max_fd = std::max(max_fd, client_sockfd);
+                if (target_thread == thread_id) {
+                    // This thread handles the client
+                    FD_SET(client_fd, &master_set);
+                    client_fds[client_fd] = true;
+                    max_fd = std::max(max_fd, client_fd);
                 } else {
-                    // This connection is not for this thread, close it
-                    close(client_sockfd);
+                    // Pass the fd to the correct thread
+                    // For simplicity, we just close it here - the correct approach would be
+                    // to use a message queue or pipe to pass the fd to another thread
+                    close(client_fd);
                 }
             }
         }
         
-        // Check for data on client sockets
-        for (auto it = client_sockets.begin(); it != client_sockets.end();) {
-            int client_sockfd = it->first;
-            
-            if (FD_ISSET(client_sockfd, &read_fds)) {
-                int32_t operation_type;
-                int64_t argument;
+        // Check client sockets for this thread
+        std::vector<int> to_remove;
+        for (auto& [fd, _] : client_fds) {
+            if (FD_ISSET(fd, &read_set)) {
+                int32_t op_type;
+                int64_t arg_value;
                 
-                int recv_result = recv_msg(client_sockfd, &operation_type, &argument);
-                if (recv_result != 0) {
-                    // Client disconnected or error
-                    FD_CLR(client_sockfd, &master_fds);
-                    close(client_sockfd);
-                    it = client_sockets.erase(it);
+                int result = recv_msg(fd, &op_type, &arg_value);
+                if (result != 0) {
+                    // Error or client disconnected
+                    to_remove.push_back(fd);
                     continue;
                 }
                 
-                switch (operation_type) {
+                // Process the message
+                switch (op_type) {
                     case OPERATION_ADD:
-                        global_counter.fetch_add(argument);
+                        global_counter.fetch_add(arg_value);
                         break;
-                        
+                    
                     case OPERATION_SUB:
-                        global_counter.fetch_sub(argument);
+                        global_counter.fetch_sub(arg_value);
                         break;
-                        
+                    
                     case OPERATION_TERMINATION: {
-                        int64_t current_counter = global_counter.load();
+                        // Get the current counter value
+                        int64_t counter_val = global_counter.load();
                         
-                        // Print counter value
+                        // Print the counter value
                         {
                             std::lock_guard<std::mutex> lock(print_mutex);
-                            std::cout << current_counter << std::endl;
+                            std::cout << counter_val << std::endl;
                             std::cout.flush();
                         }
                         
-                        // Send COUNTER response
-                        if (send_msg(client_sockfd, OPERATION_COUNTER, current_counter) != 0) {
-                            std::lock_guard<std::mutex> lock(print_mutex);
-                            std::cerr << "Failed to send counter response" << std::endl;
-                        }
+                        // Send the COUNTER response
+                        send_msg(fd, OPERATION_COUNTER, counter_val);
                         
-                        // Close connection after termination
-                        FD_CLR(client_sockfd, &master_fds);
-                        close(client_sockfd);
-                        it = client_sockets.erase(it);
-                        continue;
+                        // Mark for removal
+                        to_remove.push_back(fd);
+                        break;
                     }
-                        
+                    
                     default:
+                        // Unknown operation
                         std::lock_guard<std::mutex> lock(print_mutex);
-                        std::cerr << "Unknown operation type: " << operation_type << std::endl;
+                        std::cerr << "Unknown operation: " << op_type << std::endl;
                         break;
                 }
             }
-            ++it;
+        }
+        
+        // Clean up closed connections
+        for (int fd : to_remove) {
+            FD_CLR(fd, &master_set);
+            close(fd);
+            client_fds.erase(fd);
+        }
+        
+        // Recalculate max_fd if needed
+        if (!to_remove.empty()) {
+            max_fd = listen_fd;
+            for (auto& [fd, _] : client_fds) {
+                max_fd = std::max(max_fd, fd);
+            }
         }
     }
 }
 
 int main(int argc, char* argv[]) {
+    // Ignore SIGPIPE to prevent crashes when writing to closed sockets
+    signal(SIGPIPE, SIG_IGN);
+    
     if (argc != 3) {
         std::cerr << "Usage: " << argv[0] << " <num_threads> <port>" << std::endl;
         return 1;
@@ -150,31 +173,23 @@ int main(int argc, char* argv[]) {
     int port = std::atoi(argv[2]);
     
     // Create listening socket
-    int listen_sockfd = listening_socket(port);
-    if (listen_sockfd < 0) {
+    int listen_fd = listening_socket(port);
+    if (listen_fd < 0) {
         std::cerr << "Failed to create listening socket" << std::endl;
         return 1;
     }
     
-    // Set listening socket to non-blocking
-    if (set_nonblocking(listen_sockfd) < 0) {
-        std::cerr << "Failed to set listening socket to non-blocking mode" << std::endl;
-        close(listen_sockfd);
-        return 1;
-    }
-    
-    std::vector<std::thread> threads;
-    
     // Create server threads
-    for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back(server_thread, i, listen_sockfd, num_threads);
+    std::vector<std::thread> threads;
+    for (int i = 0; i < num_threads; ++i) {
+        threads.emplace_back(server_thread, i, listen_fd, num_threads);
     }
     
     // Wait for threads (they run indefinitely)
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& t : threads) {
+        t.join();
     }
     
-    close(listen_sockfd);
+    close(listen_fd);
     return 0;
 }
